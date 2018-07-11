@@ -12,15 +12,23 @@ import (
 
 type Extractor struct {
 	limiter *rate.Limiter
+	requestTokenPool chan bool
 }
 
-func NewExtractor(limiter *rate.Limiter) *Extractor {
-	return &Extractor{
+func NewExtractor(limiter *rate.Limiter, concurrentRequestLimit int) *Extractor {
+	e := &Extractor{
 		limiter: limiter,
+		requestTokenPool: make(chan bool, concurrentRequestLimit),
 	}
+
+	for i := 0; i < concurrentRequestLimit; i++ {
+		e.requestTokenPool <- true
+	}
+
+	return e
 }
 
-func (e *Extractor) HtmlNodesByAttrInPages(ctx context.Context, urls []string, namespace, attr, val string) (results []*html.Node, err error) {
+func (e *Extractor) HtmlNodesByAttrInPages(ctx context.Context, urls []string, tag, namespace, attr, val string) (results []*html.Node, err error) {
 
 	// Create channel for receiving per-page results.
 	resultCh := make(chan struct {
@@ -32,21 +40,24 @@ func (e *Extractor) HtmlNodesByAttrInPages(ctx context.Context, urls []string, n
 	for _, url := range urls {
 		go func(url string) {
 
-			e.limiter.Wait(ctx)
-
 			var result struct {
 				Results []*html.Node
 				Err     error
 			}
-
-			rootNode, err := GetHtml(url)
 			if err != nil {
 				result.Err = err
 				resultCh <- result
 				return
 			}
 
-			result.Results = HtmlNodesByAttr(rootNode, namespace, attr, val)
+			rootNode, err := e.GetHtml(ctx, url)
+			if err != nil {
+				result.Err = err
+				resultCh <- result
+				return
+			}
+
+			result.Results = HtmlNodesByAttr(rootNode, namespace, tag, attr, val)
 			resultCh <- result
 		}(url)
 	}
@@ -71,35 +82,42 @@ func (e *Extractor) HtmlNodesByAttrInPages(ctx context.Context, urls []string, n
 	return
 }
 
-func HtmlNodesByAttr(parentNode *html.Node, namespace, key, val string) (results []*html.Node) {
+func HtmlNodesByAttr(parentNode *html.Node, tag, namespace, key, val string) (results []*html.Node) {
 
 	var stack []*html.Node
 	currentNode := parentNode
 
 	for currentNode != nil {
 
-		// Check if our current node matches.
-		for _, attr := range currentNode.Attr {
-			if attr.Namespace != namespace {
-				continue
-			}
-			if attr.Key != key {
-				continue
-			}
+		if tag == "" || (currentNode.Type == html.ElementNode && currentNode.Data == tag) {
 
-			if attr.Val == val {
-				results = append(results, currentNode)
-				break
-			}
+			if key != "" {
+				// Check if our current node matches.
+				for _, attr := range currentNode.Attr {
+					if attr.Namespace != namespace {
+						continue
+					}
+					if attr.Key != key {
+						continue
+					}
 
-			partsVal := strings.Split(attr.Val, " ")
-			for _, partVal := range partsVal {
-				if partVal == val {
-					results = append(results, currentNode)
+					if attr.Val == val {
+						results = append(results, currentNode)
+						break
+					}
+
+					partsVal := strings.Split(attr.Val, " ")
+					for _, partVal := range partsVal {
+						if partVal == val {
+							results = append(results, currentNode)
+							break
+						}
+					}
 					break
 				}
+			} else {
+				results = append(results, currentNode)
 			}
-			break
 		}
 
 		// If our current node has children,
@@ -126,7 +144,18 @@ func HtmlNodesByAttr(parentNode *html.Node, namespace, key, val string) (results
 	return
 }
 
-func GetHtml(url string) (*html.Node, error) {
+func (e *Extractor) GetHtml(ctx context.Context, url string) (*html.Node, error) {
+
+	err := e.limiter.Wait(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	<-e.requestTokenPool
+	defer func() {
+		e.requestTokenPool <- true
+	}()
+
 	if glog.V(2) {
 		glog.Infoln("Retrieving", url)
 	}
