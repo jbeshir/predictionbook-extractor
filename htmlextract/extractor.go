@@ -82,6 +82,14 @@ func (e *Extractor) HtmlNodesByAttrInPages(ctx context.Context, urls []string, t
 	return
 }
 
+func HtmlNodeByAttr(parentNode *html.Node, tag, namespace, key, val string) (result *html.Node) {
+	nodes := HtmlNodesByAttr(parentNode, tag, namespace, key, val)
+	if len(nodes) > 0 {
+		return nodes[0]
+	}
+	return nil
+}
+
 func HtmlNodesByAttr(parentNode *html.Node, tag, namespace, key, val string) (results []*html.Node) {
 
 	var stack []*html.Node
@@ -134,10 +142,14 @@ func HtmlNodesByAttr(parentNode *html.Node, tag, namespace, key, val string) (re
 				stack = stack[:len(stack)-1]
 			}
 
-			// Advance to our next sibling.
+			// Advance to our next sibling, unless this is the root node.
 			// This will set the current node to nil,
 			// at the end of the document.
-			currentNode = currentNode.NextSibling
+			if len(stack) > 0 {
+				currentNode = currentNode.NextSibling
+			} else {
+				currentNode = nil
+			}
 		}
 	}
 
