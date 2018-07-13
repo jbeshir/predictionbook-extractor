@@ -1,30 +1,30 @@
 package predictions
 
 import (
-	"strconv"
-	"github.com/jbeshir/predictionbook-extractor/htmlextract"
-	"time"
 	"context"
-	"golang.org/x/net/html"
 	"errors"
-	"strings"
 	"fmt"
+	"github.com/jbeshir/predictionbook-extractor/htmlextract"
+	"golang.org/x/net/html"
 	"sort"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type Source struct {
-	baseUrl string
+	baseUrl   string
 	extractor *htmlextract.Extractor
 }
 
 func NewSource(extractor *htmlextract.Extractor, baseUrl string) *Source {
 	return &Source{
-		baseUrl: baseUrl,
+		baseUrl:   baseUrl,
 		extractor: extractor,
 	}
 }
 
-func (s* Source) Latest(ctx context.Context) (*PredictionSummary, error) {
+func (s *Source) Latest(ctx context.Context) (*PredictionSummary, error) {
 	latest, _, err := s.RetrievePredictionPage(ctx, 1)
 	if err != nil {
 		return nil, err
@@ -80,8 +80,8 @@ func (s *Source) AllPredictions(ctx context.Context) (predictions []*PredictionS
 	return
 }
 
-func (s* Source) RetrievePredictionPage(ctx context.Context, index int64) (predictions []*PredictionSummary, pageInfo *PredictionPageInfo, err error) {
-	page, err := s.extractor.GetHtml(ctx, s.baseUrl + "/predictions/page/" + strconv.FormatInt(index, 10))
+func (s *Source) RetrievePredictionPage(ctx context.Context, index int64) (predictions []*PredictionSummary, pageInfo *PredictionPageInfo, err error) {
+	page, err := s.extractor.GetHtml(ctx, s.baseUrl+"/predictions/page/"+strconv.FormatInt(index, 10))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -207,27 +207,27 @@ func (s* Source) RetrievePredictionPage(ctx context.Context, index int64) (predi
 		pageInfo.LastPage = index
 	}
 
-
 	return predictions, pageInfo, nil
 }
 
 type PredictionSummary struct {
-	Id int64
-	Title string
-	Creator string
-	Created time.Time
-	Deadline time.Time
+	Id             int64
+	Title          string
+	Creator        string
+	Created        time.Time
+	Deadline       time.Time
 	MeanConfidence float64
-	WagerCount int64
-	Outcome Outcome
+	WagerCount     int64
+	Outcome        Outcome
 }
 
 type PredictionPageInfo struct {
-	Index int64
+	Index    int64
 	LastPage int64
 }
 
 type Outcome int64
+
 const (
 	Unknown Outcome = iota
 	Right

@@ -1,23 +1,23 @@
 package htmlextract
 
 import (
-	"golang.org/x/net/html"
-	"strings"
-	"github.com/golang/glog"
-	"net/http"
-	"errors"
-	"golang.org/x/time/rate"
 	"context"
+	"errors"
+	"github.com/golang/glog"
+	"golang.org/x/net/html"
+	"golang.org/x/time/rate"
+	"net/http"
+	"strings"
 )
 
 type Extractor struct {
-	limiter *rate.Limiter
+	limiter          *rate.Limiter
 	requestTokenPool chan bool
 }
 
 func NewExtractor(limiter *rate.Limiter, concurrentRequestLimit int) *Extractor {
 	e := &Extractor{
-		limiter: limiter,
+		limiter:          limiter,
 		requestTokenPool: make(chan bool, concurrentRequestLimit),
 	}
 

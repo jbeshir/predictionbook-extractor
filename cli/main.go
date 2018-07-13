@@ -1,13 +1,13 @@
 package main
 
 import (
-	"flag"
-	"github.com/jbeshir/predictionbook-extractor/predictions"
-	"github.com/jbeshir/predictionbook-extractor/htmlextract"
-	"golang.org/x/time/rate"
 	"context"
-	"fmt"
 	"encoding/csv"
+	"flag"
+	"fmt"
+	"github.com/jbeshir/predictionbook-extractor/htmlextract"
+	"github.com/jbeshir/predictionbook-extractor/predictions"
+	"golang.org/x/time/rate"
 	"os"
 	"strconv"
 )
