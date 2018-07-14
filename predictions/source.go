@@ -154,7 +154,7 @@ func (s *Source) RetrievePredictionPage(ctx context.Context, index int64) (predi
 			}
 		}
 
-		wagerCountNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "wager_count")
+		wagerCountNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "wagers_count")
 		if wagerCountNode != nil && wagerCountNode.FirstChild != nil && wagerCountNode.FirstChild.Type == html.TextNode {
 			wagerCountText := strings.TrimSpace(wagerCountNode.FirstChild.Data)
 			var wagerCount int64
