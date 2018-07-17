@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"math"
 )
 
 type Source struct {
@@ -25,7 +26,7 @@ func NewSource(extractor *htmlextract.Extractor, baseUrl string) *Source {
 }
 
 func (s *Source) Latest(ctx context.Context) (*PredictionSummary, error) {
-	latest, _, err := s.RetrievePredictionPage(ctx, 1)
+	latest, _, err := s.RetrievePredictionListPage(ctx, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +38,7 @@ func (s *Source) Latest(ctx context.Context) (*PredictionSummary, error) {
 }
 
 func (s *Source) PredictionPageCount(ctx context.Context) (int64, error) {
-	_, info, err := s.RetrievePredictionPage(ctx, 1)
+	_, info, err := s.RetrievePredictionListPage(ctx, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -52,7 +53,7 @@ func (s *Source) AllPredictions(ctx context.Context) (predictions []*PredictionS
 	currentPage := int64(1)
 	totalPages := int64(1)
 	for {
-		newPredictions, pageInfo, err := s.RetrievePredictionPage(ctx, currentPage)
+		newPredictions, pageInfo, err := s.RetrievePredictionListPage(ctx, currentPage)
 		if err != nil {
 			return nil, err
 		}
@@ -80,7 +81,89 @@ func (s *Source) AllPredictions(ctx context.Context) (predictions []*PredictionS
 	return
 }
 
-func (s *Source) RetrievePredictionPage(ctx context.Context, index int64) (predictions []*PredictionSummary, pageInfo *PredictionPageInfo, err error) {
+func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*PredictionSummary) (responses []*PredictionResponse, err error) {
+	respCh := make(chan []*PredictionResponse, 1)
+	errCh := make(chan error)
+
+	launched := 0
+	for _, p := range predictions {
+		go func(prediction int64) {
+			r, err := s.RetrievePredictionResponses(ctx, prediction)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			respCh <- r
+		}(p.Id)
+		launched++
+	}
+
+	for i := 0; i < launched; i++ {
+		select {
+			case err := <-errCh:
+				return nil, err
+			case r := <-respCh:
+				responses = append(responses, r...)
+		}
+	}
+	return responses, nil
+}
+
+func (s *Source) RetrievePredictionResponses(ctx context.Context, prediction int64) (responses []*PredictionResponse, err error) {
+	page, err := s.extractor.GetHtml(ctx, s.baseUrl+"/predictions/"+strconv.FormatInt(prediction, 10))
+	if err != nil {
+		return nil, err
+	}
+
+	responseNodes := htmlextract.HtmlNodesByAttr(page, "", "", "class", "response")
+	for _, node := range responseNodes {
+
+		response := new(PredictionResponse)
+		response.Prediction = prediction
+
+		timeNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "date")
+		if timeNode != nil {
+			for _, attr := range timeNode.Attr {
+				if attr.Key == "title" {
+					createdAt, err := time.Parse("2006-01-02 15:04:05 MST", attr.Val)
+					if err == nil {
+						response.Time = createdAt
+					}
+					break
+				}
+			}
+		}
+
+		userNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "user")
+		if userNode != nil && userNode.FirstChild != nil && userNode.FirstChild.Type == html.TextNode {
+			response.User = userNode.FirstChild.Data
+		}
+
+		confidenceNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "confidence")
+		if confidenceNode != nil && confidenceNode.FirstChild != nil && confidenceNode.FirstChild.Type == html.TextNode {
+			confidenceText := strings.TrimSpace(confidenceNode.FirstChild.Data)
+			var confidencePercentage float64
+			_, err := fmt.Sscanf(confidenceText, "%f%%", &confidencePercentage)
+			if err == nil {
+				response.Confidence = confidencePercentage / 100
+			} else {
+				response.Confidence = math.NaN()
+			}
+		} else {
+			response.Confidence = math.NaN()
+		}
+
+		commentNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "comment")
+		if commentNode != nil && commentNode.FirstChild != nil && commentNode.FirstChild.Type == html.TextNode {
+			response.Comment = commentNode.FirstChild.Data
+		}
+
+		responses = append(responses, response)
+	}
+	return responses, nil
+}
+
+func (s *Source) RetrievePredictionListPage(ctx context.Context, index int64) (predictions []*PredictionSummary, pageInfo *PredictionPageInfo, err error) {
 	page, err := s.extractor.GetHtml(ctx, s.baseUrl+"/predictions/page/"+strconv.FormatInt(index, 10))
 	if err != nil {
 		return nil, nil, err
@@ -224,6 +307,14 @@ type PredictionSummary struct {
 type PredictionPageInfo struct {
 	Index    int64
 	LastPage int64
+}
+
+type PredictionResponse struct {
+	Prediction int64
+	Time       time.Time
+	User       string
+	Confidence float64
+	Comment    string
 }
 
 type Outcome int64
