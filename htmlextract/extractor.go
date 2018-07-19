@@ -174,16 +174,28 @@ func (e *Extractor) GetHtml(ctx context.Context, url string) (*html.Node, error)
 
 	resp, err := http.Get(url)
 	if err != nil {
+		if glog.V(2) {
+			glog.Infof("HTTP request error: %s\n", err)
+		}
 		return nil, err
 	}
 	if resp.StatusCode != 200 {
+		if glog.V(2) {
+			glog.Infof("HTTP error: %s\n", resp.Status)
+		}
 		return nil, errors.New("HTTP error: " + resp.Status)
 	}
 
 	rootNode, err := html.Parse(resp.Body)
 	if err != nil {
+		if glog.V(2) {
+			glog.Infof("Parse error: %s\n", err.Error())
+		}
 		return nil, errors.New("Parse error: " + err.Error())
 	}
 
+	if glog.V(2) {
+		glog.Infoln("Retrieved", url)
+	}
 	return rootNode, nil
 }

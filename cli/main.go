@@ -25,14 +25,14 @@ func main() {
 	if *export != "" || *exportResponses != "" {
 		ps, err := source.AllPredictions(context.Background())
 		if err != nil {
-			fmt.Errorf("Error retrieving predictions: %s\n", err)
+			fmt.Fprintf(os.Stderr, "Error retrieving predictions: %s\n", err)
 			return
 		}
 
 		if *export != "" {
 			exportFile, err := os.Create(*export)
 			if err != nil {
-				fmt.Errorf("Error opening export file: %s\n", err)
+				fmt.Fprintf(os.Stderr, "Error opening export file: %s\n", err)
 				return
 			}
 
@@ -49,7 +49,7 @@ func main() {
 					p.Title,
 				})
 				if err != nil {
-					fmt.Errorf("Error writing predictions: %s\n", err)
+					fmt.Fprintf(os.Stderr, "Error writing predictions: %s\n", err)
 					return
 				}
 			}
@@ -57,13 +57,13 @@ func main() {
 			csvWriter.Flush()
 			err = csvWriter.Error()
 			if err != nil {
-				fmt.Errorf("Error writing predictions: %s\n", err)
+				fmt.Fprintf(os.Stderr, "Error writing predictions: %s\n", err)
 				return
 			}
 
 			err = exportFile.Close()
 			if err != nil {
-				fmt.Errorf("Error writing predictions: %s\n", err)
+				fmt.Fprintf(os.Stderr, "Error writing predictions: %s\n", err)
 				return
 			}
 		}
@@ -71,13 +71,13 @@ func main() {
 		if *exportResponses != "" {
 			responses, err := source.AllPredictionResponses(context.Background(), ps)
 			if err != nil {
-				fmt.Errorf("Error retrieving prediction responses %s\n", err)
+				fmt.Fprintf(os.Stderr, "Error retrieving prediction responses %s\n", err)
 				return
 			}
 
 			responseFile, err := os.Create(*exportResponses)
 			if err != nil {
-				fmt.Errorf("Error opening response export file: %s\n", err)
+				fmt.Fprintf(os.Stderr, "Error opening response export file: %s\n", err)
 				return
 			}
 
@@ -91,7 +91,7 @@ func main() {
 					r.Comment,
 				})
 				if err != nil {
-					fmt.Errorf("Error writing prediction responses: %s\n", err)
+					fmt.Fprintf(os.Stderr, "Error writing prediction responses: %s\n", err)
 					return
 				}
 			}
@@ -99,13 +99,13 @@ func main() {
 			csvWriter.Flush()
 			err = csvWriter.Error()
 			if err != nil {
-				fmt.Errorf("Error writing prediction responses: %s\n", err)
+				fmt.Fprintf(os.Stderr, "Error writing prediction responses: %s\n", err)
 				return
 			}
 
 			err = responseFile.Close()
 			if err != nil {
-				fmt.Errorf("Error writing prediction responses: %s\n", err)
+				fmt.Fprintf(os.Stderr, "Error writing prediction responses: %s\n", err)
 				return
 			}
 		}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 	"math"
+	"github.com/golang/glog"
 )
 
 type Source struct {
@@ -88,12 +89,19 @@ func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*Pred
 	launched := 0
 	for _, p := range predictions {
 		go func(prediction int64) {
-			r, err := s.RetrievePredictionResponses(ctx, prediction)
+			var err error
+			for attempt := 0; attempt < 3; attempt++ {
+				var r []*PredictionResponse
+				r, err = s.RetrievePredictionResponses(ctx, prediction)
+				if err == nil {
+					respCh <- r
+					break
+				}
+			}
 			if err != nil {
 				errCh <- err
 				return
 			}
-			respCh <- r
 		}(p.Id)
 		launched++
 	}
@@ -101,10 +109,20 @@ func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*Pred
 	for i := 0; i < launched; i++ {
 		select {
 			case err := <-errCh:
+				if glog.V(2) {
+					glog.Infof("Got an error while generating responses: %s\n", err)
+				}
 				return nil, err
 			case r := <-respCh:
 				responses = append(responses, r...)
+				if glog.V(2) {
+					glog.Infof("Added %d responses, now collected %d responses...\n", len(r), len(responses))
+				}
 		}
+	}
+
+	if glog.V(2) {
+		glog.Infof("Finished collecting responses\n")
 	}
 	return responses, nil
 }
