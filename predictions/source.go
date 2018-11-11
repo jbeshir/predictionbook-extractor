@@ -4,25 +4,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jbeshir/predictionbook-extractor/htmlextract"
+	"github.com/PuerkitoBio/goquery"
+	"github.com/golang/glog"
 	"golang.org/x/net/html"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"math"
-	"github.com/golang/glog"
 )
 
 type Source struct {
-	baseUrl   string
-	extractor *htmlextract.Extractor
+	baseUrl     string
+	htmlFetcher HtmlFetcher
 }
 
-func NewSource(extractor *htmlextract.Extractor, baseUrl string) *Source {
+type HtmlFetcher interface {
+	GetHtml(ctx context.Context, url string) (*html.Node, error)
+}
+
+func NewSource(htmlFetcher HtmlFetcher, baseUrl string) *Source {
 	return &Source{
-		baseUrl:   baseUrl,
-		extractor: extractor,
+		baseUrl:     baseUrl,
+		htmlFetcher: htmlFetcher,
 	}
 }
 
@@ -108,16 +112,16 @@ func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*Pred
 
 	for i := 0; i < launched; i++ {
 		select {
-			case err := <-errCh:
-				if glog.V(2) {
-					glog.Infof("Got an error while generating responses: %s\n", err)
-				}
-				return nil, err
-			case r := <-respCh:
-				responses = append(responses, r...)
-				if glog.V(2) {
-					glog.Infof("Added %d responses, now collected %d responses...\n", len(r), len(responses))
-				}
+		case err := <-errCh:
+			if glog.V(2) {
+				glog.Infof("Got an error while generating responses: %s\n", err)
+			}
+			return nil, err
+		case r := <-respCh:
+			responses = append(responses, r...)
+			if glog.V(2) {
+				glog.Infof("Added %d responses, now collected %d responses...\n", len(r), len(responses))
+			}
 		}
 	}
 
@@ -128,183 +132,132 @@ func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*Pred
 }
 
 func (s *Source) RetrievePredictionResponses(ctx context.Context, prediction int64) (responses []*PredictionResponse, err error) {
-	page, err := s.extractor.GetHtml(ctx, s.baseUrl+"/predictions/"+strconv.FormatInt(prediction, 10))
+	rootNode, err := s.htmlFetcher.GetHtml(ctx, s.baseUrl+"/predictions/"+strconv.FormatInt(prediction, 10))
 	if err != nil {
 		return nil, err
 	}
+	page := goquery.NewDocumentFromNode(rootNode)
 
-	responseNodes := htmlextract.HtmlNodesByAttr(page, "", "", "class", "response")
-	for _, node := range responseNodes {
+	page.Find(".response").Each(func(i int, responseNode *goquery.Selection) {
 
 		response := new(PredictionResponse)
 		response.Prediction = prediction
 
-		timeNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "date")
-		if timeNode != nil {
-			for _, attr := range timeNode.Attr {
-				if attr.Key == "title" {
-					createdAt, err := time.Parse("2006-01-02 15:04:05 MST", attr.Val)
-					if err == nil {
-						response.Time = createdAt
-					}
-					break
-				}
-			}
-		}
-
-		userNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "user")
-		if userNode != nil && userNode.FirstChild != nil && userNode.FirstChild.Type == html.TextNode {
-			response.User = userNode.FirstChild.Data
-		}
-
-		confidenceNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "confidence")
-		if confidenceNode != nil && confidenceNode.FirstChild != nil && confidenceNode.FirstChild.Type == html.TextNode {
-			confidenceText := strings.TrimSpace(confidenceNode.FirstChild.Data)
-			var confidencePercentage float64
-			_, err := fmt.Sscanf(confidenceText, "%f%%", &confidencePercentage)
+		createdAtStr, exists := responseNode.Find(".date").Attr("title")
+		if exists {
+			createdAt, err := time.Parse("2006-01-02 15:04:05 MST", createdAtStr)
 			if err == nil {
-				response.Confidence = confidencePercentage / 100
-			} else {
-				response.Confidence = math.NaN()
+				response.Time = createdAt
 			}
+		}
+
+		response.User = responseNode.Find(".user").Text()
+		response.Comment = responseNode.Find(".comment").Text()
+
+		confidenceStr := strings.TrimSpace(responseNode.Find(".confidence").Text())
+		var confidencePercentage float64
+		_, err := fmt.Sscanf(confidenceStr, "%f%%", &confidencePercentage)
+		if err == nil {
+			response.Confidence = confidencePercentage / 100
 		} else {
 			response.Confidence = math.NaN()
 		}
 
-		commentNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "comment")
-		if commentNode != nil && commentNode.FirstChild != nil && commentNode.FirstChild.Type == html.TextNode {
-			response.Comment = commentNode.FirstChild.Data
-		}
-
 		responses = append(responses, response)
-	}
+	})
+
 	return responses, nil
 }
 
 func (s *Source) RetrievePredictionListPage(ctx context.Context, index int64) (predictions []*PredictionSummary, pageInfo *PredictionPageInfo, err error) {
-	page, err := s.extractor.GetHtml(ctx, s.baseUrl+"/predictions/page/"+strconv.FormatInt(index, 10))
+	rootNode, err := s.htmlFetcher.GetHtml(ctx, s.baseUrl+"/predictions/page/"+strconv.FormatInt(index, 10))
 	if err != nil {
 		return nil, nil, err
 	}
+	page := goquery.NewDocumentFromNode(rootNode)
 
-	predictionNodes := htmlextract.HtmlNodesByAttr(page, "", "", "class", "prediction")
-	for _, node := range predictionNodes {
+	page.Find(".prediction").Each(func(i int, predictionNode *goquery.Selection) {
 		prediction := new(PredictionSummary)
 
-		titleNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "title")
-		titleLinkNode := htmlextract.HtmlNodeByAttr(titleNode, "a", "", "", "")
-		if titleLinkNode != nil {
-			if titleLinkNode.FirstChild != nil && titleLinkNode.FirstChild.Type == html.TextNode {
-				prediction.Title = titleLinkNode.FirstChild.Data
-			}
-			for _, attr := range titleLinkNode.Attr {
-				if attr.Key == "href" {
-					predictionUrl := attr.Val
-					predictionUrlParts := strings.Split(predictionUrl, "/")
-					if len(predictionUrlParts) > 0 {
-						predictionIdStr := predictionUrlParts[len(predictionUrlParts)-1]
-						id, err := strconv.ParseInt(predictionIdStr, 10, 64)
-						if err == nil {
-							prediction.Id = id
-						}
-					}
-					break
+		titleLink := predictionNode.Find(".title a")
+		prediction.Title = titleLink.Text()
+		predictionUrl, exists := titleLink.Attr("href")
+		if exists {
+			predictionUrlParts := strings.Split(predictionUrl, "/")
+			if len(predictionUrlParts) > 0 {
+				predictionIdStr := predictionUrlParts[len(predictionUrlParts)-1]
+				id, err := strconv.ParseInt(predictionIdStr, 10, 64)
+				if err == nil {
+					prediction.Id = id
 				}
 			}
 		}
 
-		creatorNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "creator")
-		if creatorNode != nil && creatorNode.FirstChild != nil && creatorNode.FirstChild.Type == html.TextNode {
-			prediction.Creator = creatorNode.FirstChild.Data
-		}
-
-		createdAtNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "created_at")
-		if createdAtNode != nil {
-			for _, attr := range createdAtNode.Attr {
-				if attr.Key == "title" {
-					createdAt, err := time.Parse("2006-01-02 15:04:05 MST", attr.Val)
-					if err == nil {
-						prediction.Created = createdAt
-					}
-					break
-				}
+		creator := predictionNode.Find(".creator")
+		if len(creator.Nodes) > 0 {
+			creatorNode := creator.Nodes[0]
+			if creatorNode.FirstChild != nil && creatorNode.FirstChild.Type == html.TextNode {
+				prediction.Creator = creatorNode.FirstChild.Data
 			}
 		}
 
-		deadlineNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "deadline")
-		deadlineDateNode := htmlextract.HtmlNodeByAttr(deadlineNode, "", "", "class", "date")
-		if deadlineDateNode != nil {
-			for _, attr := range deadlineDateNode.Attr {
-				if attr.Key == "title" {
-					deadline, err := time.Parse("2006-01-02 15:04:05 MST", attr.Val)
-					if err == nil {
-						prediction.Deadline = deadline
-					}
-					break
-				}
-			}
-		}
-
-		confidenceNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "mean_confidence")
-		if confidenceNode != nil && confidenceNode.FirstChild != nil && confidenceNode.FirstChild.Type == html.TextNode {
-			confidenceText := strings.TrimSpace(confidenceNode.FirstChild.Data)
-			var confidencePercentage float64
-			_, err := fmt.Sscanf(confidenceText, "%f%% confidence", &confidencePercentage)
+		createdAtStr, exists := predictionNode.Find(".created_at").Attr("title")
+		if exists {
+			createdAt, err := time.Parse("2006-01-02 15:04:05 MST", createdAtStr)
 			if err == nil {
-				prediction.MeanConfidence = confidencePercentage / 100
+				prediction.Created = createdAt
 			}
 		}
 
-		wagerCountNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "wagers_count")
-		if wagerCountNode != nil && wagerCountNode.FirstChild != nil && wagerCountNode.FirstChild.Type == html.TextNode {
-			wagerCountText := strings.TrimSpace(wagerCountNode.FirstChild.Data)
-			var wagerCount int64
-			_, err := fmt.Sscanf(wagerCountText, "%d wagers", &wagerCount)
+		deadlineStr, exists := predictionNode.Find(".deadline .date").Attr("title")
+		if exists {
+			deadline, err := time.Parse("2006-01-02 15:04:05 MST", deadlineStr)
 			if err == nil {
-				prediction.WagerCount = wagerCount
-			} else {
-				prediction.WagerCount = 1
+				prediction.Deadline = deadline
 			}
+		}
+
+		confidenceStr := strings.TrimSpace(predictionNode.Find(".mean_confidence").Text())
+		var confidencePercentage float64
+		_, err := fmt.Sscanf(confidenceStr, "%f%% confidence", &confidencePercentage)
+		if err == nil {
+			prediction.MeanConfidence = confidencePercentage / 100
+		}
+
+		wagerCountStr := strings.TrimSpace(predictionNode.Find(".wagers_count").Text())
+		var wagerCount int64
+		_, err = fmt.Sscanf(wagerCountStr, "%d wagers", &wagerCount)
+		if err == nil {
+			prediction.WagerCount = wagerCount
 		} else {
 			prediction.WagerCount = 1
 		}
 
-		outcomeNode := htmlextract.HtmlNodeByAttr(node, "", "", "class", "outcome")
-		if outcomeNode != nil && outcomeNode.FirstChild != nil && outcomeNode.FirstChild.Type == html.TextNode {
-			outcomeStr := strings.TrimSpace(outcomeNode.FirstChild.Data)
-			if outcomeStr == "right" {
-				prediction.Outcome = Right
-			} else if outcomeStr == "wrong" {
-				prediction.Outcome = Wrong
-			} else {
-				prediction.Outcome = Unknown
-			}
+		outcomeStr := strings.TrimSpace(predictionNode.Find(".outcome").Text())
+		if outcomeStr == "right" {
+			prediction.Outcome = Right
+		} else if outcomeStr == "wrong" {
+			prediction.Outcome = Wrong
 		} else {
 			prediction.Outcome = Unknown
 		}
 
 		predictions = append(predictions, prediction)
-	}
+	})
 
 	pageInfo = new(PredictionPageInfo)
 	pageInfo.Index = index
 
-	paginationNode := htmlextract.HtmlNodeByAttr(page, "nav", "", "class", "pagination")
-	lastPageNode := htmlextract.HtmlNodeByAttr(paginationNode, "", "", "class", "last")
-	linkNode := htmlextract.HtmlNodeByAttr(lastPageNode, "a", "", "", "")
-	if linkNode != nil {
-		for _, attr := range linkNode.Attr {
-			if attr.Key == "href" {
-				if strings.HasPrefix(attr.Val, "/predictions/page/") {
-					lastPageStr := attr.Val[len("/predictions/page/"):]
-					lastPage, err := strconv.ParseInt(lastPageStr, 10, 64)
-					if err == nil {
-						pageInfo.LastPage = lastPage
-					}
-				}
+	lastPageHref, exists := page.Find("nav.pagination .last a").Attr("href")
+	if exists {
+		if strings.HasPrefix(lastPageHref, "/predictions/page/") {
+			lastPageStr := lastPageHref[len("/predictions/page/"):]
+			lastPage, err := strconv.ParseInt(lastPageStr, 10, 64)
+			if err == nil {
+				pageInfo.LastPage = lastPage
 			}
 		}
-	} else if lastPageNode == nil {
+	} else {
 		pageInfo.LastPage = index
 	}
 
