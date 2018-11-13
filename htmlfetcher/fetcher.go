@@ -1,4 +1,4 @@
-package htmlextract
+package htmlfetcher
 
 import (
 	"context"
@@ -9,34 +9,34 @@ import (
 	"net/http"
 )
 
-type Extractor struct {
+type Fetcher struct {
 	limiter          *rate.Limiter
 	requestTokenPool chan bool
 }
 
-func NewExtractor(limiter *rate.Limiter, concurrentRequestLimit int) *Extractor {
-	e := &Extractor{
+func NewFetcher(limiter *rate.Limiter, concurrentRequestLimit int) *Fetcher {
+	f := &Fetcher{
 		limiter:          limiter,
 		requestTokenPool: make(chan bool, concurrentRequestLimit),
 	}
 
 	for i := 0; i < concurrentRequestLimit; i++ {
-		e.requestTokenPool <- true
+		f.requestTokenPool <- true
 	}
 
-	return e
+	return f
 }
 
-func (e *Extractor) GetHtml(ctx context.Context, url string) (*html.Node, error) {
+func (f *Fetcher) GetHtml(ctx context.Context, url string) (*html.Node, error) {
 
-	err := e.limiter.Wait(ctx)
+	err := f.limiter.Wait(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	<-e.requestTokenPool
+	<-f.requestTokenPool
 	defer func() {
-		e.requestTokenPool <- true
+		f.requestTokenPool <- true
 	}()
 
 	if glog.V(2) {

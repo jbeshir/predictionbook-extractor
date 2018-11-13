@@ -5,7 +5,7 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
-	"github.com/jbeshir/predictionbook-extractor/htmlextract"
+	"github.com/jbeshir/predictionbook-extractor/htmlfetcher"
 	"github.com/jbeshir/predictionbook-extractor/predictions"
 	"golang.org/x/time/rate"
 	"os"
@@ -19,8 +19,8 @@ func main() {
 	exportResponses := flag.String("exportresponses", "", "Export all prediction responses in CSV format to the given file")
 	flag.Parse()
 
-	extractor := htmlextract.NewExtractor(rate.NewLimiter(1, 2), 2)
-	source := predictions.NewSource(extractor, *url)
+	fetcher := htmlfetcher.NewFetcher(rate.NewLimiter(1, 2), 2)
+	source := predictions.NewSource(fetcher, *url)
 
 	if *export != "" || *exportResponses != "" {
 		ps, err := source.AllPredictions(context.Background())
