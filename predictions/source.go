@@ -3,15 +3,11 @@ package predictions
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/golang/glog"
 	"golang.org/x/net/html"
-	"math"
 	"sort"
 	"strconv"
-	"strings"
-	"time"
 )
 
 type Source struct {
@@ -136,162 +132,29 @@ func (s *Source) RetrievePredictionResponses(ctx context.Context, prediction int
 	if err != nil {
 		return nil, err
 	}
+
 	page := goquery.NewDocumentFromNode(rootNode)
-
-	page.Find(".response").Each(func(i int, responseNode *goquery.Selection) {
-
-		response := new(PredictionResponse)
-		response.Prediction = prediction
-
-		createdAtStr, exists := responseNode.Find(".date").Attr("title")
-		if exists {
-			createdAt, err := time.Parse("2006-01-02 15:04:05 MST", createdAtStr)
-			if err == nil {
-				response.Time = createdAt
-			}
-		}
-
-		response.User = responseNode.Find(".user").Text()
-		response.Comment = responseNode.Find(".comment").Text()
-
-		confidenceStr := strings.TrimSpace(responseNode.Find(".confidence").Text())
-		var confidencePercentage float64
-		_, err := fmt.Sscanf(confidenceStr, "%f%%", &confidencePercentage)
-		if err == nil {
-			response.Confidence = confidencePercentage / 100
-		} else {
-			response.Confidence = math.NaN()
-		}
-
+	page.Find(".response").Each(func(i int, responseSelector *goquery.Selection) {
+		response := ExtractPredictionResponse(responseSelector.Nodes[0], prediction)
 		responses = append(responses, response)
 	})
 
 	return responses, nil
 }
 
-func (s *Source) RetrievePredictionListPage(ctx context.Context, index int64) (predictions []*PredictionSummary, pageInfo *PredictionPageInfo, err error) {
+func (s *Source) RetrievePredictionListPage(ctx context.Context, index int64) (predictions []*PredictionSummary, pageInfo *PredictionListPageInfo, err error) {
 	rootNode, err := s.htmlFetcher.GetHtml(ctx, s.baseUrl+"/predictions/page/"+strconv.FormatInt(index, 10))
 	if err != nil {
 		return nil, nil, err
 	}
 	page := goquery.NewDocumentFromNode(rootNode)
 
-	page.Find(".prediction").Each(func(i int, predictionNode *goquery.Selection) {
-		prediction := new(PredictionSummary)
-
-		titleLink := predictionNode.Find(".title a")
-		prediction.Title = titleLink.Text()
-		predictionUrl, exists := titleLink.Attr("href")
-		if exists {
-			predictionUrlParts := strings.Split(predictionUrl, "/")
-			if len(predictionUrlParts) > 0 {
-				predictionIdStr := predictionUrlParts[len(predictionUrlParts)-1]
-				id, err := strconv.ParseInt(predictionIdStr, 10, 64)
-				if err == nil {
-					prediction.Id = id
-				}
-			}
-		}
-
-		creator := predictionNode.Find(".creator")
-		if len(creator.Nodes) > 0 {
-			creatorNode := creator.Nodes[0]
-			if creatorNode.FirstChild != nil && creatorNode.FirstChild.Type == html.TextNode {
-				prediction.Creator = creatorNode.FirstChild.Data
-			}
-		}
-
-		createdAtStr, exists := predictionNode.Find(".created_at").Attr("title")
-		if exists {
-			createdAt, err := time.Parse("2006-01-02 15:04:05 MST", createdAtStr)
-			if err == nil {
-				prediction.Created = createdAt
-			}
-		}
-
-		deadlineStr, exists := predictionNode.Find(".deadline .date").Attr("title")
-		if exists {
-			deadline, err := time.Parse("2006-01-02 15:04:05 MST", deadlineStr)
-			if err == nil {
-				prediction.Deadline = deadline
-			}
-		}
-
-		confidenceStr := strings.TrimSpace(predictionNode.Find(".mean_confidence").Text())
-		var confidencePercentage float64
-		_, err := fmt.Sscanf(confidenceStr, "%f%% confidence", &confidencePercentage)
-		if err == nil {
-			prediction.MeanConfidence = confidencePercentage / 100
-		}
-
-		wagerCountStr := strings.TrimSpace(predictionNode.Find(".wagers_count").Text())
-		var wagerCount int64
-		_, err = fmt.Sscanf(wagerCountStr, "%d wagers", &wagerCount)
-		if err == nil {
-			prediction.WagerCount = wagerCount
-		} else {
-			prediction.WagerCount = 1
-		}
-
-		outcomeStr := strings.TrimSpace(predictionNode.Find(".outcome").Text())
-		if outcomeStr == "right" {
-			prediction.Outcome = Right
-		} else if outcomeStr == "wrong" {
-			prediction.Outcome = Wrong
-		} else {
-			prediction.Outcome = Unknown
-		}
-
+	page.Find(".prediction").Each(func(i int, predictionSelector *goquery.Selection) {
+		prediction := ExtractPredictionSummary(predictionSelector.Nodes[0])
 		predictions = append(predictions, prediction)
 	})
 
-	pageInfo = new(PredictionPageInfo)
-	pageInfo.Index = index
-
-	lastPageHref, exists := page.Find("nav.pagination .last a").Attr("href")
-	if exists {
-		if strings.HasPrefix(lastPageHref, "/predictions/page/") {
-			lastPageStr := lastPageHref[len("/predictions/page/"):]
-			lastPage, err := strconv.ParseInt(lastPageStr, 10, 64)
-			if err == nil {
-				pageInfo.LastPage = lastPage
-			}
-		}
-	} else {
-		pageInfo.LastPage = index
-	}
+	pageInfo = ExtractPredictionListPageInfo(rootNode, index)
 
 	return predictions, pageInfo, nil
 }
-
-type PredictionSummary struct {
-	Id             int64
-	Title          string
-	Creator        string
-	Created        time.Time
-	Deadline       time.Time
-	MeanConfidence float64
-	WagerCount     int64
-	Outcome        Outcome
-}
-
-type PredictionPageInfo struct {
-	Index    int64
-	LastPage int64
-}
-
-type PredictionResponse struct {
-	Prediction int64
-	Time       time.Time
-	User       string
-	Confidence float64
-	Comment    string
-}
-
-type Outcome int64
-
-const (
-	Unknown Outcome = iota
-	Right
-	Wrong
-)
