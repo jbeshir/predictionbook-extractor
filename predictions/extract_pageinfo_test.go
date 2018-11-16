@@ -29,7 +29,7 @@ func TestExtractPageInfo(t *testing.T) {
 		t.Errorf("Incorrect page index; should be %d, was %d", 2, pageInfo.Index)
 	}
 	if pageInfo.LastPage != 287 {
-		t.Errorf("Incorrect page index; should be %d, was %d", 287, pageInfo.LastPage)
+		t.Errorf("Incorrect last page; should be %d, was %d", 287, pageInfo.LastPage)
 	}
 }
 
