@@ -43,9 +43,6 @@ func (s *Source) PredictionPageCount(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if info.LastPage == 0 {
-		return 0, errors.New("unable to extract page count")
-	}
 
 	return info.LastPage, nil
 }
@@ -124,6 +121,14 @@ func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*Pred
 	if glog.V(2) {
 		glog.Infof("Finished collecting responses\n")
 	}
+
+	sort.Slice(responses, func(i, j int) bool {
+		if responses[i].Prediction != responses[j].Prediction {
+			return responses[i].Prediction < responses[j].Prediction
+		}
+		return responses[i].Time.Unix() < responses[j].Time.Unix()
+	})
+
 	return responses, nil
 }
 
