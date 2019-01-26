@@ -8,6 +8,7 @@ import (
 	"golang.org/x/net/html"
 	"sort"
 	"strconv"
+	"time"
 )
 
 type Source struct {
@@ -48,6 +49,12 @@ func (s *Source) PredictionPageCount(ctx context.Context) (int64, error) {
 }
 
 func (s *Source) AllPredictions(ctx context.Context) (predictions []*PredictionSummary, err error) {
+
+	return s.AllPredictionsSince(ctx, time.Time{})
+}
+
+func (s *Source) AllPredictionsSince(ctx context.Context, t time.Time) (predictions []*PredictionSummary, err error) {
+
 	currentPage := int64(1)
 	totalPages := int64(1)
 	for {
@@ -56,12 +63,22 @@ func (s *Source) AllPredictions(ctx context.Context) (predictions []*PredictionS
 			return nil, err
 		}
 
-		predictions = append(predictions, newPredictions...)
-		totalPages = pageInfo.LastPage
+		lastIncluded := len(newPredictions) - 1
+		for lastIncluded > -1 && newPredictions[lastIncluded].Created.Before(t) {
+			lastIncluded--
+		}
 
+		predictions = append(predictions, newPredictions[:lastIncluded+1]...)
+
+		if lastIncluded < len(newPredictions)-1 {
+			break
+		}
+
+		totalPages = pageInfo.LastPage
 		if currentPage == totalPages {
 			break
 		}
+
 		currentPage++
 	}
 

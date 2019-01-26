@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 )
 
 type TestHtmlFetcher struct {
@@ -151,6 +152,41 @@ func TestAllPredictions(t *testing.T) {
 	}
 	if summaries[30].Id != 38 {
 		t.Errorf("31st prediction had wrong ID; should be %d, was %d", 38, summaries[50].Id)
+	}
+}
+
+func TestAllPredictionsSince(t *testing.T) {
+	ctx := context.Background()
+
+	callCount := 0
+	fetcher := &TestHtmlFetcher{
+		GetHtmlFunc: func(ctx context.Context, url string) (*html.Node, error) {
+			callCount++
+			expectedUrl := "https://example.org/predictions/page/" + strconv.Itoa(callCount)
+			if url != expectedUrl {
+				t.Errorf("Incorrect response page requested, should be %s, was %s", expectedUrl, url)
+			}
+
+			if callCount == 1 {
+				return testHtmlLoad(t, "test_list_empty.html"), nil
+			} else if callCount != 287 {
+				return testHtmlLoad(t, "test_list.html"), nil
+			} else {
+				return testHtmlLoad(t, "test_list_last.html"), nil
+			}
+		},
+	}
+
+	s := NewSource(fetcher, "https://example.org")
+	summaries, err := s.AllPredictionsSince(ctx, time.Unix(1537670940, 0))
+	if err != nil {
+		t.Errorf("Error should have been nil, was %s", err)
+	}
+	if callCount != 2 {
+		t.Errorf("GetHtml called incorrect number of times, should be %d, was %d", 2, callCount)
+	}
+	if len(summaries) != 46 {
+		t.Errorf("Retrieved incorrect number of predictions; should be %d, was %d", 46, len(summaries))
 	}
 }
 
