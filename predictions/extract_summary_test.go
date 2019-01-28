@@ -22,6 +22,8 @@ func testSummariesLoad(t *testing.T) (summaryNodes []*html.Node) {
 }
 
 func TestExtractPredictionSummarySingleWager(t *testing.T) {
+	t.Parallel()
+
 	summaries := testSummariesLoad(t)
 	prediction := ExtractPredictionSummary(summaries[3])
 
@@ -52,6 +54,8 @@ func TestExtractPredictionSummarySingleWager(t *testing.T) {
 }
 
 func TestExtractPredictionSummaryMultipleWager(t *testing.T) {
+	t.Parallel()
+
 	summaries := testSummariesLoad(t)
 	prediction := ExtractPredictionSummary(summaries[6])
 	if prediction.WagerCount != 7 {

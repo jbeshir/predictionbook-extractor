@@ -22,6 +22,8 @@ func testResponsesLoad(t *testing.T) (responseNodes []*html.Node) {
 }
 
 func TestExtractResponseAssignmentOnly(t *testing.T) {
+	t.Parallel()
+
 	responses := testResponsesLoad(t)
 	response := ExtractPredictionResponse(responses[1], 193436)
 
@@ -43,6 +45,8 @@ func TestExtractResponseAssignmentOnly(t *testing.T) {
 }
 
 func TestExtractResponseCommentOnly(t *testing.T) {
+	t.Parallel()
+
 	responses := testResponsesLoad(t)
 	response := ExtractPredictionResponse(responses[2], 193436)
 
@@ -55,6 +59,8 @@ func TestExtractResponseCommentOnly(t *testing.T) {
 }
 
 func TestExtractResponseCommentAndAssignment(t *testing.T) {
+	t.Parallel()
+
 	responses := testResponsesLoad(t)
 	response := ExtractPredictionResponse(responses[5], 193436)
 

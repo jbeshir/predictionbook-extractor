@@ -18,6 +18,7 @@ func (f *TestHtmlFetcher) GetHtml(ctx context.Context, url string) (*html.Node, 
 }
 
 func TestRetrievePredictionListPage(t *testing.T) {
+	t.Parallel()
 
 	ctx := context.Background()
 
@@ -48,6 +49,8 @@ func TestRetrievePredictionListPage(t *testing.T) {
 }
 
 func TestRetrievePredictionResponses(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	fetcher := &TestHtmlFetcher{
@@ -74,6 +77,8 @@ func TestRetrievePredictionResponses(t *testing.T) {
 }
 
 func TestLatest(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	fetcher := &TestHtmlFetcher{
@@ -97,6 +102,8 @@ func TestLatest(t *testing.T) {
 }
 
 func TestPredictionPageCount(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	fetcher := &TestHtmlFetcher{
@@ -120,6 +127,8 @@ func TestPredictionPageCount(t *testing.T) {
 }
 
 func TestAllPredictions(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	callCount := 0
@@ -156,6 +165,8 @@ func TestAllPredictions(t *testing.T) {
 }
 
 func TestAllPredictionsSince(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	callCount := 0
@@ -191,6 +202,8 @@ func TestAllPredictionsSince(t *testing.T) {
 }
 
 func TestAllPredictionResponses(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	summaries := []*PredictionSummary{

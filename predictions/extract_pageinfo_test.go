@@ -22,6 +22,8 @@ func testHtmlLoad(t *testing.T, name string) (rootNode *html.Node) {
 }
 
 func TestExtractPageInfo(t *testing.T) {
+	t.Parallel()
+
 	rootNode := testHtmlLoad(t, "test_list.html")
 
 	pageInfo := ExtractPredictionListPageInfo(rootNode, 2)
@@ -34,6 +36,8 @@ func TestExtractPageInfo(t *testing.T) {
 }
 
 func TestExtractPageInfoLast(t *testing.T) {
+	t.Parallel()
+
 	rootNode := testHtmlLoad(t, "test_list_last.html")
 
 	pageInfo := ExtractPredictionListPageInfo(rootNode, 287)
