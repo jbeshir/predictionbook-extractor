@@ -96,8 +96,8 @@ func (s *Source) AllPredictionsSince(ctx context.Context, t time.Time) (predicti
 	return
 }
 
-func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*PredictionSummary) (responses []*PredictionResponse, err error) {
-	respCh := make(chan []*PredictionResponse, 1)
+func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*PredictionSummary) (summaries []*PredictionSummary, responses []*PredictionResponse, err error) {
+	respCh := make(chan struct{s *PredictionSummary; rs []*PredictionResponse}, 1)
 	errCh := make(chan error)
 
 	launched := 0
@@ -105,10 +105,11 @@ func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*Pred
 		go func(prediction int64) {
 			var err error
 			for attempt := 0; attempt < 3; attempt++ {
-				var r []*PredictionResponse
-				r, err = s.RetrievePredictionResponses(ctx, prediction)
+				var rs []*PredictionResponse
+				var sum *PredictionSummary
+				sum, rs, err = s.RetrievePredictionResponses(ctx, prediction)
 				if err == nil {
-					respCh <- r
+					respCh <- struct{s *PredictionSummary; rs []*PredictionResponse}{s:sum,rs:rs}
 					break
 				}
 			}
@@ -126,11 +127,12 @@ func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*Pred
 			if glog.V(2) {
 				glog.Infof("Got an error while generating responses: %s\n", err)
 			}
-			return nil, err
+			return nil, nil, err
 		case r := <-respCh:
-			responses = append(responses, r...)
+			summaries = append(summaries, r.s)
+			responses = append(responses, r.rs...)
 			if glog.V(2) {
-				glog.Infof("Added %d responses, now collected %d responses...\n", len(r), len(responses))
+				glog.Infof("Added %d responses, now collected %d responses...\n", len(r.rs), len(responses))
 			}
 		}
 	}
@@ -139,6 +141,9 @@ func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*Pred
 		glog.Infof("Finished collecting responses\n")
 	}
 
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].Id < summaries[j].Id
+	})
 	sort.Slice(responses, func(i, j int) bool {
 		if responses[i].Prediction != responses[j].Prediction {
 			return responses[i].Prediction < responses[j].Prediction
@@ -146,13 +151,13 @@ func (s *Source) AllPredictionResponses(ctx context.Context, predictions []*Pred
 		return responses[i].Time.Unix() < responses[j].Time.Unix()
 	})
 
-	return responses, nil
+	return summaries, responses, nil
 }
 
-func (s *Source) RetrievePredictionResponses(ctx context.Context, prediction int64) (responses []*PredictionResponse, err error) {
+func (s *Source) RetrievePredictionResponses(ctx context.Context, prediction int64) (summary *PredictionSummary, responses []*PredictionResponse, err error) {
 	rootNode, err := s.htmlFetcher.GetHtml(ctx, s.baseUrl+"/predictions/"+strconv.FormatInt(prediction, 10))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	page := goquery.NewDocumentFromNode(rootNode)
@@ -161,7 +166,7 @@ func (s *Source) RetrievePredictionResponses(ctx context.Context, prediction int
 		responses = append(responses, response)
 	})
 
-	return responses, nil
+	return ExtractPredictionSummaryResponsePage(prediction, rootNode), responses, nil
 }
 
 func (s *Source) RetrievePredictionListPage(ctx context.Context, index int64) (predictions []*PredictionSummary, pageInfo *PredictionListPageInfo, err error) {

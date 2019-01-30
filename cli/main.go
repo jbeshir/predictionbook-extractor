@@ -69,7 +69,7 @@ func main() {
 		}
 
 		if *exportResponses != "" {
-			responses, err := source.AllPredictionResponses(context.Background(), ps)
+			_, responses, err := source.AllPredictionResponses(context.Background(), ps)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error retrieving prediction responses %s\n", err)
 				return

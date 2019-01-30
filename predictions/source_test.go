@@ -64,7 +64,7 @@ func TestRetrievePredictionResponses(t *testing.T) {
 	}
 
 	s := NewSource(fetcher, "https://example.org")
-	responses, err := s.RetrievePredictionResponses(ctx, 193436)
+	summary, responses, err := s.RetrievePredictionResponses(ctx, 193436)
 	if err != nil {
 		t.Errorf("Error should have been nil, was %s", err)
 	}
@@ -73,6 +73,13 @@ func TestRetrievePredictionResponses(t *testing.T) {
 	}
 	if responses[1].Time.Unix() != 1539248198 {
 		t.Errorf("Second prediction had incorrect time, should be %d, was %d", 1539248198, responses[1].Time.Unix())
+	}
+
+	if summary.Id != 193436 {
+		t.Errorf("Returned prediction summary had wrong ID, should be %d, was %d", 193436, summary.Id)
+	}
+	if summary.Outcome != Right {
+		t.Errorf("Returned prediction summary had wrong outcome, should be %d, was %d", Right, summary.Outcome)
 	}
 }
 
@@ -247,7 +254,7 @@ func TestAllPredictionResponses(t *testing.T) {
 	}
 
 	s := NewSource(fetcher, "https://example.org")
-	responses, err := s.AllPredictionResponses(ctx, summaries)
+	newSummaries, responses, err := s.AllPredictionResponses(ctx, summaries)
 	if err != nil {
 		t.Errorf("Error should have been nil, was %s", err)
 	}
@@ -262,5 +269,12 @@ func TestAllPredictionResponses(t *testing.T) {
 	}
 	if responses[10].Time.Unix() != 1539316508 {
 		t.Errorf("11th response had wrong time; should be %d, was %d", 1539316508, responses[9].Time.Unix())
+	}
+
+	if len(newSummaries) != 2 {
+		t.Errorf("Retrieved incorrect number of new summaries; should be %d, was %d", 2, len(newSummaries))
+	}
+	if newSummaries[1].Id != 400 {
+		t.Errorf("2nd summary had wrong ID; should be %d, was %d", 400, newSummaries[1].Id)
 	}
 }
