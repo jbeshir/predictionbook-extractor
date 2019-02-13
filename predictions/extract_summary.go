@@ -125,7 +125,7 @@ func extractSummaryWagerCount(predictionSelector *goquery.Selection) (wagerCount
 }
 
 func extractSummaryOutcome(predictionSelector *goquery.Selection) (outcome Outcome) {
-	outcomeStr := strings.TrimSpace(predictionSelector.Find(".outcome").Text())
+	outcomeStr := strings.TrimSpace(predictionSelector.Find(".outcome").First().Text())
 	if outcomeStr == "right" {
 		outcome = Right
 	} else if outcomeStr == "wrong" {
